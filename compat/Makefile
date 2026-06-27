@@ -43,11 +43,21 @@ $(OUT)/ir_demo: apps/ir_blast.c furi_compat.cpp test_ir.cpp | $(OUT)
 xtensa: | $(OUT)
 	@test -x $(XCC) || { echo "Xtensa toolchain not found; run 'pio run -e esp32-serial' once."; exit 1; }
 	$(XCC) $(XAPPFLAGS) apps/hello_world.c -o $(OUT)/hello_world.elf
+	$(XCC) $(XAPPFLAGS) apps/ir_blast.c    -o $(OUT)/ir_blast.elf
 	$(XPP) -c -Os -mlongcalls -fno-rtti -fno-exceptions -Iinclude -I../include \
 	    furi_compat.cpp -o $(OUT)/furi_compat_xtensa.o
 	@echo "app + shim cross-compiled for ESP32."
 	@echo "app imports (resolved against the host shim at load):"
 	@$(XR) -s $(OUT)/hello_world.elf | awk '/UND/ && /furi|gui|canvas|view_port/ {print "  " $$8}' | sort -u
+
+# Verify the real on-device pipeline: load a Xtensa Flipper app through the ELF
+# loader, resolving its imports against the shim. (Loads/relocates/resolves on the
+# desktop; executing the Xtensa code needs the chip.)
+load: xtensa
+	g++ -std=c++17 -Iinclude -I../include test_fap_load.cpp ../src/elfload.cpp furi_compat.cpp -o $(OUT)/test_fap_load
+	./$(OUT)/test_fap_load $(OUT)/hello_world.elf hello_world_app
+	@echo
+	./$(OUT)/test_fap_load $(OUT)/ir_blast.elf ir_blast_app
 
 $(OUT):
 	mkdir -p $(OUT)
@@ -55,4 +65,4 @@ $(OUT):
 clean:
 	rm -rf $(OUT)
 
-.PHONY: run xtensa clean
+.PHONY: run ir xtensa load clean

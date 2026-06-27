@@ -17,7 +17,7 @@
 
 static uint8_t s_fb[FB_H][FB_W];
 struct TextItem { int16_t x, y; char s[48]; };
-static TextItem s_text[16];
+static TextItem s_txt[16];
 static int      s_ntext;
 static BiosTable g_bios;
 
@@ -37,9 +37,9 @@ static void s_pixel(int16_t x, int16_t y, uint16_t color) {
 }
 static void s_text(int16_t x, int16_t y, const char* s, uint16_t) {
     if (s_ntext >= 16) return;
-    s_text[s_ntext].x = x; s_text[s_ntext].y = y;
-    strncpy(s_text[s_ntext].s, s, sizeof(s_text[0].s) - 1);
-    s_text[s_ntext].s[sizeof(s_text[0].s) - 1] = '\0';
+    s_txt[s_ntext].x = x; s_txt[s_ntext].y = y;
+    strncpy(s_txt[s_ntext].s, s, sizeof(s_txt[0].s) - 1);
+    s_txt[s_ntext].s[sizeof(s_txt[0].s) - 1] = '\0';
     s_ntext++;
 }
 static void s_flush(void) {
@@ -56,10 +56,10 @@ static void s_flush(void) {
         grid[r][CW] = '\0';
     }
     for (int i = 0; i < s_ntext; i++) {
-        int row = s_text[i].y / 2, col = s_text[i].x / 2;
+        int row = s_txt[i].y / 2, col = s_txt[i].x / 2;
         if (row < 0 || row >= CH) continue;
-        for (int k = 0; s_text[i].s[k] && col + k < CW; k++)
-            if (col + k >= 0) grid[row][col + k] = s_text[i].s[k];
+        for (int k = 0; s_txt[i].s[k] && col + k < CW; k++)
+            if (col + k >= 0) grid[row][col + k] = s_txt[i].s[k];
     }
     Serial.print("\033[H");                          /* home (works in most terminals) */
     for (int r = 0; r < CH; r++) Serial.println(grid[r]);

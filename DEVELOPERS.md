@@ -107,6 +107,23 @@ Cardputer yet). The mechanism — a tiny on-device ELF loader — is explained i
 [INFO.md](INFO.md), including the one step that still needs on-hardware
 confirmation.
 
+## Running Flipper Zero apps (compatibility layer)
+
+There's a separate path that lets you **build a Flipper Zero app from source** and
+run it on esp32bios — so you can borrow Flipper's app ecosystem rather than start
+empty. A Flipper app's `furi`/`gui`/`canvas`/`furi_hal_*` calls are re-declared to
+match Flipper's real headers and implemented over `BiosTable`; the app compiles
+unchanged in shape, loads through the on-device ELF loader, and its imports bind to
+the shim (the same way a `.fap` binds to Flipper firmware).
+
+This is a proof-of-concept covering the GUI surface plus IR; see
+[compat/README.md](compat/README.md) for what's implemented, verified, and how to
+grow it. Firmwares: `esp32-flipper` (serial) and `cardputer-flipper` (M5 screen).
+
+> Note: `data/app.elf` is shared by all runtime-loading envs, so build the app for
+> the firmware you're about to flash (`loader/build_esp32_app.sh` for a native
+> esp32bios app, `loader/build_flipper_app.sh` for a Flipper app) before `uploadfs`.
+
 ## Handing your app to end-users
 
 Until there's a nicer distribution story, tell your users:
@@ -130,6 +147,10 @@ into a few shared hosts (see the notes), so this is shorter than it looks.
 - [x] **M5Stack Core / Core2 / Fire / StickC** — M5Unified (`m5stack`)
 - [x] **M5Stack Cardputer** (ESP32-S3) — M5Unified (`cardputer`)
 - [x] **Runtime ELF loader**, classic ESP32 — loads apps from flash (`esp32-elf`)
+- [x] **Flipper-app loader** — runs Flipper Zero app *source* (`esp32-flipper`,
+  `cardputer-flipper`); see [compat/README.md](compat/README.md)
+- [x] **IR transmit capability** — `furi_hal_infrared` over `BIOS_CAP_INFRARED`,
+  bit-banged on the Cardputer IR LED
 
 ### M5 line — nearly free (reuse `host_m5.cpp`, just add an env)
 
@@ -151,10 +172,18 @@ A single `host_tft.cpp` parameterized by build flags covers most of these.
 - [ ] **Generic ESP32 + ST7789 / ILI9341** breakout
 - [ ] **WT32-SC01 / Sunton** panels (ESP32-S3 + capacitive touch)
 
-### Boards with input worth exposing (needs a contract addition)
+### Peripherals — capability sub-tables (`include/bios_caps.h`)
 
-These have keyboards/extra input — good reason to **append** a keyboard/touch
-function to `BiosTable` (see "Extending the contract" in [INFO.md](INFO.md)).
+Optional hardware is exposed via `bios->capability(BIOS_CAP_*)` (see the registry
+section in [INFO.md](INFO.md)). Add a `BIOS_CAP_*` sub-table, implement the
+matching `furi_hal_*` in the compat shim on top of it, and have boards advertise it.
+
+- [x] **IR** (`BIOS_CAP_INFRARED` + `furi_hal_infrared`) — Cardputer LED
+- [ ] **Sub-GHz** (`BIOS_CAP_SUBGHZ` + `furi_hal_subghz`) — needs a CC1101-class radio
+- [ ] **NFC** (`BIOS_CAP_NFC`) — needs an NFC frontend
+- [ ] **Keyboard/touch input** — append to `BiosTable` (always present where it exists)
+
+### Boards with input worth exposing
 
 - [ ] **LilyGo T-Deck** (ESP32-S3, trackball + keyboard + ST7789)
 - [ ] **M5 Cardputer keyboard** (currently only button A is wired; add the keys)
@@ -164,8 +193,9 @@ function to `BiosTable` (see "Extending the contract" in [INFO.md](INFO.md)).
 
 - [ ] **Heltec WiFi Kit 32** (built-in SSD1306) — likely just new pins for `host_ssd1306`
 - [ ] **SDL2 desktop host** — a real graphical window instead of ASCII (`native` v2)
-- [ ] **Runtime ELF loader for ESP32-S3** — needs the S3 toolchain in
-  `build_esp32_app.sh` + a cache flush after the IRAM copy (see [INFO.md](INFO.md))
+- [ ] **Native esp32bios app loader on ESP32-S3** — `build_esp32_app.sh s3` exists
+  for the Flipper path; wire the same S3 toolchain choice into the `esp32-elf` host
+  and add a cache flush after the IRAM copy if execution misbehaves (see [INFO.md](INFO.md))
 
 ## Adding a new device
 
