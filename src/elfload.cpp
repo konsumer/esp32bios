@@ -40,9 +40,11 @@ typedef struct { uint32_t r_offset, r_info; int32_t r_addend; }  Elf32_Rela;
 #define ELF32_R_SYM(i)   ((i) >> 8)
 #define ELF32_R_TYPE(i)  ((i) & 0xff)
 
-#define R_XTENSA_NONE     0
-#define R_XTENSA_32       1    /* == R_386_32; *P = S + A (absolute, in literals) */
-#define R_XTENSA_SLOT0_OP 20   /* PC-relative op (l32r/branch); pre-encoded by gas */
+#define R_XTENSA_NONE        0
+#define R_XTENSA_32          1   /* == R_386_32; *P = S + A (absolute, in literals) */
+#define R_XTENSA_ASM_EXPAND  11  /* relaxation marker on a call/longcall macro */
+#define R_XTENSA_ASM_SIMPLIFY 12 /* relaxation marker */
+#define R_XTENSA_SLOT0_OP    20  /* PC-relative op (l32r/branch); pre-encoded by gas */
 
 #define MAX_SECTIONS    64
 
@@ -57,6 +59,8 @@ static const char* type_name(uint32_t t) {
     switch (t) {
         case R_XTENSA_NONE: return "R_XTENSA_NONE";
         case R_XTENSA_32:   return "R_XTENSA_32";
+        case 11:            return "R_XTENSA_ASM_EXPAND";
+        case 12:            return "R_XTENSA_ASM_SIMPLIFY";
         case 20:            return "R_XTENSA_SLOT0_OP";
         default:            return "R_XTENSA_<other>";
     }
@@ -150,7 +154,7 @@ int elf_inspect(const uint8_t* image, size_t len, const elf_env* env) {
 }
 
 int elf_load(const uint8_t* image, size_t len, const elf_env* env,
-             uint16_t expect_machine, elf_app* out) {
+             uint16_t expect_machine, elf_symbol* entries, int n_entries) {
     const Elf32_Ehdr* eh; const Elf32_Shdr* sh;
     int rc = parse_header(image, len, expect_machine, env, &eh, &sh);
     if (rc != ELF_OK) return rc;
@@ -253,6 +257,13 @@ int elf_load(const uint8_t* image, size_t len, const elf_env* env,
                     }
                     break;   /* no-op: layout preserved */
                 }
+                case R_XTENSA_ASM_EXPAND:
+                case R_XTENSA_ASM_SIMPLIFY:
+                    /* Linker-relaxation markers. The compiler already emitted the
+                     * final, un-relaxed instruction sequence (e.g. a -mlongcalls
+                     * l32r+callx8); the call's target arrives via the R_XTENSA_32
+                     * literal we DO patch. Since we never relax, ignore these. */
+                    break;
                 default: {
                     char b[80]; snprintf(b, sizeof(b), "elf: unsupported reloc type %u (%s)",
                                          type, type_name(type));
@@ -263,23 +274,26 @@ int elf_load(const uint8_t* image, size_t len, const elf_env* env,
         }
     }
 
-    /* 3. Find the entry points. */
-    out->app_setup = 0; out->app_loop = 0;
+    /* 3. Find each requested entry symbol by name. */
+    for (int e = 0; e < n_entries; e++) entries[e].addr = 0;
     for (int i = 0; i < nsym; i++) {
         if (!syms[i].st_name) continue;
-        const char* nm = str + syms[i].st_name;
         if (syms[i].st_shndx == SHN_UNDEF || syms[i].st_shndx >= MAX_SECTIONS) continue;
         void* secbase = base[syms[i].st_shndx];
         if (!secbase) continue;
-        void* addr = (uint8_t*)secbase + syms[i].st_value;
-        if (!strcmp(nm, "app_setup")) out->app_setup = (void(*)(const void*))addr;
-        else if (!strcmp(nm, "app_loop")) out->app_loop = (void(*)(const void*))addr;
+        const char* nm = str + syms[i].st_name;
+        for (int e = 0; e < n_entries; e++)
+            if (!entries[e].addr && !strcmp(nm, entries[e].name))
+                entries[e].addr = (uint8_t*)secbase + syms[i].st_value;
     }
-    if (!out->app_setup || !out->app_loop) { elog(env, "elf: app_setup/app_loop not found"); return ELF_ERR_NO_ENTRY; }
+    for (int e = 0; e < n_entries; e++) {
+        if (!entries[e].addr) {
+            char b[96]; snprintf(b, sizeof(b), "elf: entry symbol '%s' not found", entries[e].name);
+            elog(env, b);
+            return ELF_ERR_NO_ENTRY;
+        }
+    }
 
-    /* Hand back the regions for optional later cleanup. */
-    out->region_count = nregions;
-    out->regions = 0;   /* caller-managed lifetime omitted for brevity */
-    (void)EM_XTENSA;
+    (void)nregions; (void)EM_XTENSA;
     return ELF_OK;
 }

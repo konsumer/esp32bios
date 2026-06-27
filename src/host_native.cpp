@@ -92,6 +92,7 @@ int main(void) {
     bios.display_text   = n_text;
     bios.display_flush  = n_flush;
     bios.button_pressed = n_button;
+    bios.capability     = bios_no_caps;
 
     printf("\033[2J");                /* clear screen once */
     app_setup(&bios);

@@ -45,13 +45,12 @@ int main(int argc, char** argv) {
     elf_inspect(buf, len, &env);
 
     printf("\n===== elf_load =====\n");
-    elf_app app;
-    int rc = elf_load(buf, len, &env, EM_XTENSA, &app);
+    elf_symbol entries[2] = { { "app_setup", 0 }, { "app_loop", 0 } };
+    int rc = elf_load(buf, len, &env, EM_XTENSA, entries, 2);
     printf("elf_load returned %d\n", rc);
     if (rc == ELF_OK) {
-        printf("  app_setup @ %p\n", (void*)app.app_setup);
-        printf("  app_loop  @ %p\n", (void*)app.app_loop);
-        printf("  %d loadable region(s) placed\n", app.region_count);
+        printf("  app_setup @ %p\n", entries[0].addr);
+        printf("  app_loop  @ %p\n", entries[1].addr);
         printf("\nPASS: real Xtensa object fully parsed, placed, and relocated.\n");
         printf("(Execution itself requires the ESP32 -- see host_elf.cpp.)\n");
     } else {

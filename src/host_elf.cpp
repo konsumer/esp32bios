@@ -94,7 +94,9 @@ static uintptr_t e_resolve(const char* name) {
 }
 static void e_log(const char* m) { Serial.print("[elf] "); Serial.println(m); }
 
-static elf_app g_app;
+/* This host runs native esp32bios apps: two entry points taking the BIOS table. */
+static void (*g_app_setup)(const void*);
+static void (*g_app_loop)(const void*);
 static bool    g_loaded = false;
 
 static bool load_app(const char* path) {
@@ -113,11 +115,13 @@ static bool load_app(const char* path) {
     env.resolve    = e_resolve;
     env.log        = e_log;
 
-    int rc = elf_load(buf, len, &env, EM_XTENSA, &g_app);
+    elf_symbol entries[2] = { { "app_setup", 0 }, { "app_loop", 0 } };
+    int rc = elf_load(buf, len, &env, EM_XTENSA, entries, 2);
     free(buf);                                  /* sections are copied; image no longer needed */
     if (rc != ELF_OK) { Serial.printf("[elf] load failed: %d\n", rc); return false; }
-    Serial.printf("[elf] loaded; app_setup=%p app_loop=%p\n",
-                  (void*)g_app.app_setup, (void*)g_app.app_loop);
+    g_app_setup = (void(*)(const void*))entries[0].addr;
+    g_app_loop  = (void(*)(const void*))entries[1].addr;
+    Serial.printf("[elf] loaded; app_setup=%p app_loop=%p\n", (void*)g_app_setup, (void*)g_app_loop);
     return true;
 }
 
@@ -133,6 +137,7 @@ void setup() {
     g_bios.display_clear = b_clear; g_bios.display_pixel = b_pixel;
     g_bios.display_text = b_text; g_bios.display_flush = b_flush;
     g_bios.button_pressed = b_button;
+    g_bios.capability     = bios_no_caps;
 
     if (!LittleFS.begin(false)) {
         Serial.println("[elf] LittleFS mount failed (run -t uploadfs first)");
@@ -141,11 +146,11 @@ void setup() {
     if (!load_app("/app.elf")) return;
 
     g_loaded = true;
-    g_app.app_setup(&g_bios);            /* dependency injection, same as every host */
+    g_app_setup(&g_bios);                /* dependency injection, same as every host */
 }
 
 void loop() {
-    if (g_loaded) g_app.app_loop(&g_bios);
+    if (g_loaded) g_app_loop(&g_bios);
     else          delay(1000);
 }
 

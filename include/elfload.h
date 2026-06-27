@@ -47,14 +47,15 @@ typedef struct elf_env {
     void     (*log)(const char* msg);
 } elf_env;
 
-/* Filled in on success. These match the app entry points from bios.h. */
-typedef struct elf_app {
-    void (*app_setup)(const void* bios);
-    void (*app_loop)(const void* bios);
-    /* Bookkeeping so a caller could free the regions later. */
-    void**  regions;
-    int     region_count;
-} elf_app;
+/* A named entry point the caller wants located after load. The caller fills
+ * `name`; the loader fills `addr` with its runtime address (0 if not found).
+ * The entry's real signature is the caller's business -- cast `addr` to it.
+ * This keeps the loader ABI-agnostic: an esp32bios app asks for
+ * "app_setup"/"app_loop", a Flipper app asks for its FAP entry. */
+typedef struct elf_symbol {
+    const char* name;
+    void*       addr;
+} elf_symbol;
 
 /* Return codes. */
 #define ELF_OK                 0
@@ -64,15 +65,17 @@ typedef struct elf_app {
 #define ELF_ERR_ALLOC         -4
 #define ELF_ERR_RELOC         -5   /* unsupported relocation type             */
 #define ELF_ERR_UNRESOLVED    -6   /* undefined symbol the host didn't supply */
-#define ELF_ERR_NO_ENTRY      -7   /* app_setup/app_loop not found            */
+#define ELF_ERR_NO_ENTRY      -7   /* a requested entry symbol was not found  */
 
 /*
- * Load `image` (length `len`) and resolve entry points into `out`.
+ * Load `image` (length `len`), place + relocate it, resolve undefined symbols
+ * via env->resolve, and look up each requested entry in `entries[0..n_entries)`.
  * `expect_machine` is the ELF e_machine to require (EM_XTENSA on device); pass 0
  * to skip the machine check (used by the desktop structural test).
+ * Returns ELF_OK only if every requested entry was found.
  */
 int elf_load(const uint8_t* image, size_t len, const elf_env* env,
-             uint16_t expect_machine, elf_app* out);
+             uint16_t expect_machine, elf_symbol* entries, int n_entries);
 
 /*
  * Read-only walk that logs sections, symbols, and the relocation TYPES present,

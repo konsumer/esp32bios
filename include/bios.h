@@ -21,7 +21,7 @@ extern "C" {
 /* Identity / ABI guard. An app reads these first to make sure the table it was
  * handed is real and that it understands the layout.  'B' 'I' 'O' 'S'. */
 #define BIOS_MAGIC   0x534F4942u
-#define BIOS_VERSION 1
+#define BIOS_VERSION 2
 
 /* Colors are 16-bit RGB565, the lingua franca of small color displays.
  * Mono displays just treat non-zero as "lit". */
@@ -65,7 +65,16 @@ typedef struct BiosTable {
 
     /* --- input --- */
     bool     (*button_pressed)(uint8_t button_id);
+
+    /* --- optional peripherals (added in v2) ---
+     * Returns a capability sub-table for `cap_id` (see bios_caps.h), or NULL if
+     * this device doesn't have that hardware. Never NULL itself -- a host with no
+     * peripherals points this at bios_no_caps below. */
+    const void* (*capability)(uint32_t cap_id);
 } BiosTable;
+
+/* Default capability accessor for hosts with no optional peripherals. */
+static inline const void* bios_no_caps(uint32_t cap_id) { (void)cap_id; return 0; }
 
 /*
  * App entry points. The PROGRAM implements these; the HOST calls them and

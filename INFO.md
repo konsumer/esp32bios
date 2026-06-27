@@ -59,6 +59,26 @@ Never reorder or remove entries — that's the whole forward-compatibility rule.
 `magic`/`version`/`size` header fields let an app validate a table before trusting
 it, so a stale binary fails loudly instead of jumping into garbage.
 
+## Optional peripherals (the capability registry)
+
+The core `BiosTable` holds what *every* device has (screen, buttons, time).
+Radios and other peripherals — IR, sub-GHz, NFC — are different: present on some
+boards, absent on others. So they aren't crammed into `BiosTable`. Instead it has
+one accessor (added in v2):
+
+```c
+const void* cap = bios->capability(BIOS_CAP_INFRARED);   // bios_caps.h
+if (cap) { const BiosCapInfrared* ir = (const BiosCapInfrared*)cap; ir->tx(...); }
+```
+
+A host returns a capability sub-table if it has the hardware, or `NULL` if not, so
+an app **degrades gracefully** on boards that lack a given radio. Each capability
+carries its own `version` and grows append-only, independently of the core ABI.
+This is esp32bios's analog of Flipper's `furi_hal_*` layer — same idea, made
+discoverable and optional. The Flipper compat shim's `furi_hal_infrared` is
+implemented directly on top of `BIOS_CAP_INFRARED` (see `compat/`), so a Flipper
+IR app and a native esp32bios app reach the same hardware through one abstraction.
+
 ## How the app finds the table (discovery)
 
 A common first instinct (and one an LLM suggested for this project) is to hardcode

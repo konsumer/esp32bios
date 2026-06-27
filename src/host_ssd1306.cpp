@@ -66,6 +66,7 @@ void setup() {
     g_bios.display_text   = o_text;
     g_bios.display_flush  = o_flush;
     g_bios.button_pressed = o_button;
+    g_bios.capability     = bios_no_caps;
 
     app_setup(&g_bios);
 }

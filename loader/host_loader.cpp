@@ -73,6 +73,7 @@ int main(int argc, char** argv)
     g_bios.display_clear = h_clear; g_bios.display_pixel = h_pixel;
     g_bios.display_text = h_text; g_bios.display_flush = h_flush;
     g_bios.button_pressed = h_button;
+    g_bios.capability     = bios_no_caps;
     bios_vector_publish(&g_bios);
 
     /* 2. Load the app binary we were never linked against. */
